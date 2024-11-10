@@ -14,15 +14,14 @@ pub struct App {
 pub enum Msg {
 	IpcReady(Sender<()>),
 	Ipc(IpcMsg),
-	CloseWindow(window::Id),
+	// CloseWindow(window::Id),
 	Dummy,
 }
 
 impl App {
 	pub fn start(self) -> Fallible {
 		iced::daemon("pitstop", Self::update, Self::view)
-			.subscription(Self::ipc_subscription)
-			.subscription(|_| window::close_events().map(Msg::CloseWindow))
+			.subscription(Self::subscription)
 			.run_with(|| (self, Task::none()))?;
 		Ok(())
 	}
@@ -36,35 +35,31 @@ impl App {
 				self.ipc_ping();
 				match imsg {
 					IpcMsg::Quit => {
-						self.ipc_ping();
-						return if let Some(id) = self.win {
-							window::close(id).chain(iced::exit())
-						} else {
-							iced::exit()
-						}
+						// return if let Some(id) = self.win {
+						// 	window::close(id).chain(iced::exit())
+						// } else {
+						// 	iced::exit()
+						// };
+						return iced::exit();
 					},
 					IpcMsg::OpenWindow(str) => {
-						self.ipc_ping();
-						if self.win.is_none() {
+						// if self.win.is_none() {
 							return self.open_window().map(|_| Msg::Dummy);
-						}
+						// }
 					},
 					IpcMsg::Delta(x) => {
-						self.ipc_ping();
 						self.x += x;
-						dbg!(x);
-						dbg!(self.x);
 					},
 				}
-			}
-			Msg::CloseWindow(close_id) => {
-				if let Some(id) = self.win {
-					if id == close_id {
-						self.win = None;
-					}
-				}
-				return window::close(close_id);
 			},
+			// Msg::CloseWindow(close_id) => {
+			// 	if let Some(id) = self.win {
+			// 		if id == close_id {
+			// 			self.win = None;
+			// 		}
+			// 	}
+			// 	return window::close(close_id);
+			// },
 			Msg::Dummy => {},
 		}
 
@@ -73,6 +68,13 @@ impl App {
 
 	fn view(&self, id: window::Id) -> iced::Element<Msg> {
 		iced::widget::text(self.x.to_string()).into()
+	}
+
+	fn subscription(&self) -> Subscription<Msg> {
+		Subscription::batch(vec![
+			self.ipc_subscription(),
+			// window::close_events().map(Msg::CloseWindow),
+		])
 	}
 
 	fn ipc_subscription(&self) -> Subscription<Msg> {
@@ -101,12 +103,13 @@ impl App {
 			level: window::Level::AlwaysOnTop,
 			platform_specific: window::settings::PlatformSpecific {
 				application_id: "pitstop".to_string(),
-				override_redirect: true,
+				override_redirect: false,
 			},
-			exit_on_close_request: false,
+			// exit_on_close_request: false,
+			exit_on_close_request: true,
 			..Default::default()
 		});
-		self.win = Some(id);
+		// self.win = Some(id);
 		task.map(|_| Msg::Dummy)
 	}
 }

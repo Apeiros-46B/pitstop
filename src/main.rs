@@ -6,6 +6,7 @@ use util::Fallible;
 
 mod app;
 mod ipc;
+mod ui;
 mod util;
 
 #[derive(clap_derive::Parser)]
