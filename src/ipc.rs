@@ -2,7 +2,7 @@ use std::io::{BufRead, BufReader, Write};
 
 use futures::{channel::mpsc, SinkExt, StreamExt};
 use interprocess::local_socket::{
-	prelude::*, GenericFilePath, ListenerOptions, Stream
+	prelude::*, GenericFilePath, ListenerOptions, Stream,
 };
 use serde::{Deserialize, Serialize};
 
@@ -13,25 +13,47 @@ const IPC_NAME: &str = "/tmp/pitstop_ipc_channel.sock";
 #[cfg(windows)]
 const IPC_NAME: &str = r"\\.\pipe\/tmp/pitstop_ipc_channel.sock";
 
+// C2S: client -> server
+// S2C: server -> client
+// Internal: server main thread -> server ipc subscription (for pings)
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum IpcMsg {
-	Quit,
-	OpenWindow(Option<String>),
+	C2SQuit,
+	C2SOpenWindow(Option<String>),
+	InternalPing,
 }
 
-pub fn client_send(imsg: IpcMsg) -> Fallible {
-	let name = IPC_NAME.to_fs_name::<GenericFilePath>()?;
-	let conn = Stream::connect(name)?;
-	let mut conn = BufReader::new(conn);
+pub struct IpcConnection(BufReader<Stream>);
 
-	conn
-		.get_mut()
-		.write_all(ron::to_string(&imsg)?.as_bytes())?;
+impl IpcConnection {
+	pub fn new(conn: Stream) -> anyhow::Result<Self> {
+		Ok(Self(BufReader::new(conn)))
+	}
 
-	Ok(())
+	pub fn connect() -> anyhow::Result<Self> {
+		let name = IPC_NAME.to_fs_name::<GenericFilePath>()?;
+		Self::new(Stream::connect(name)?)
+	}
+
+	pub fn send(&mut self, imsg: IpcMsg) -> Fallible {
+		self
+			.0
+			.get_mut()
+			.write_all(ron::to_string(&imsg)?.as_bytes())?;
+
+		Ok(())
+	}
+
+	pub fn recv(&mut self, buf: &mut String) -> anyhow::Result<IpcMsg> {
+		self.0.read_line(buf)?;
+		let imsg = ron::from_str::<IpcMsg>(buf)?;
+		buf.clear();
+
+		Ok(imsg)
+	}
 }
 
-pub fn server_cleanup_ipc() {
+pub fn server_cleanup_socket() {
 	println!("cleaning up socket");
 	std::fs::remove_file(IPC_NAME).unwrap()
 }
@@ -56,12 +78,8 @@ pub async fn server_listen_ipc(mut output: mpsc::Sender<Msg>) -> Fallible {
 	let mut buf = String::with_capacity(128);
 
 	for conn in listener.incoming() {
-		let mut conn = BufReader::new(conn?);
-		conn.read_line(&mut buf)?;
-		output
-			.send(ron::from_str::<IpcMsg>(&buf).map(Msg::Ipc)?)
-			.await?;
-		buf.clear();
+		let mut conn = IpcConnection::new(conn?)?;
+		output.send(conn.recv(&mut buf).map(Msg::Ipc)?).await?;
 		rx.select_next_some().await; // recv ping
 	}
 
@@ -70,7 +88,9 @@ pub async fn server_listen_ipc(mut output: mpsc::Sender<Msg>) -> Fallible {
 
 // called from iced subscription
 #[cfg(not(windows))]
-pub async fn server_listen_exit_hook(mut output: mpsc::Sender<Msg>) -> Fallible {
+pub async fn server_listen_exit_hook(
+	mut output: mpsc::Sender<Msg>,
+) -> Fallible {
 	use std::sync::{self, atomic};
 
 	let running = sync::Arc::new(sync::atomic::AtomicBool::new(true));
@@ -85,7 +105,7 @@ pub async fn server_listen_exit_hook(mut output: mpsc::Sender<Msg>) -> Fallible 
 		ftime::task::sleep(ftime::time::Duration::from_secs(5)).await;
 	}
 	// signal the iced runtime to exit once ctrl+c hooked
-	output.send(Msg::Ipc(IpcMsg::Quit)).await?;
+	output.send(Msg::Ipc(IpcMsg::C2SQuit)).await?;
 
 	Ok(())
 }

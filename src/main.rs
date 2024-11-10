@@ -1,13 +1,12 @@
 use clap::Parser;
 
 use app::App;
-use ipc::{client_send, IpcMsg};
+use ipc::{IpcConnection, IpcMsg};
 use util::Fallible;
 
 mod app;
 mod components;
 mod ipc;
-mod style;
 mod util;
 
 #[derive(clap_derive::Parser)]
@@ -21,10 +20,14 @@ struct Cli {
 enum Commands {
 	Start,
 	Quit,
-	OpenWindow {
-		/// A query to preemtively enter into the search bar.
+	Open {
+		/// A query to preemptively enter into the search bar.
 		#[arg(short, long)]
-		query: Option<String>
+		query: Option<String>,
+
+		// /// dmenu mode (take menu entries from stdin)
+		// #[arg(long)]
+		// dmenu: bool,
 	},
 }
 
@@ -32,7 +35,29 @@ fn main() -> Fallible {
 	let cli = Cli::parse();
 	match &cli.cmd {
 		Commands::Start => App::default().start(),
-    Commands::Quit => client_send(IpcMsg::Quit),
-    Commands::OpenWindow { query } => client_send(IpcMsg::OpenWindow(query.clone())),
+		Commands::Quit => IpcConnection::connect()?.send(IpcMsg::C2SQuit),
+		Commands::Open { query } => {
+			let mut conn = IpcConnection::connect()?;
+			conn.send(IpcMsg::C2SOpenWindow(query.clone()))?;
+
+			// conn.send(IpcMsg::C2SOpenWindow {
+			// 	query: query.clone(),
+			// 	dmenu: *dmenu,
+			// })?;
+
+			// if !*dmenu {
+			// 	return Ok(());
+			// }
+			// conn.send(IpcMsg::C2SDmenuPopulate(
+			// 	std::io::stdin().lock().read_until.map(Result::unwrap).collect(),
+			// ))?;
+
+			// let mut buf = String::with_capacity(128);
+			// if let IpcMsg::S2CDmenuResult(res) = conn.recv(&mut buf)? {
+			// 	println!("{res}")
+			// }
+
+			Ok(())
+		},
 	}
 }

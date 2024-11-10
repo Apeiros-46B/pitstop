@@ -1,5 +1,7 @@
 use iced::widget::text_editor as editor;
 
+use crate::app::Msg;
+
 #[derive(Default)]
 pub struct Search {
 	content: editor::Content,
@@ -23,7 +25,11 @@ impl Search {
 		}
 	}
 
-	pub fn view(&self) -> iced::Element<SearchMsg> {
-		editor(&self.content).on_action(SearchMsg::Action).into()
+	pub fn view(&self) -> iced::Element<Msg> {
+		editor(&self.content).on_action(|act| Msg::Search(SearchMsg::Action(act))).into()
 	}
+}
+
+impl Search {
+	
 }

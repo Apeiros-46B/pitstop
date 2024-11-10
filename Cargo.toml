@@ -9,7 +9,7 @@ clap = "4.5.20"
 clap_derive = "4.5.18"
 futures = "0.3.31"
 fuzzy-matcher = "0.3.7"
-iced = "0.13.1"
+iced = { version = "0.13.1", features = ["advanced", "lazy"] }
 interprocess = "2.2.1"
 ron = "0.8.1"
 serde = "1.0.214"
