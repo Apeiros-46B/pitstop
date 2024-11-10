@@ -7,6 +7,7 @@ use util::Fallible;
 mod app;
 mod components;
 mod ipc;
+mod style;
 mod util;
 
 #[derive(clap_derive::Parser)]
@@ -25,10 +26,6 @@ enum Commands {
 		#[arg(short, long)]
 		query: Option<String>
 	},
-	Delta { // TEST
-		#[arg(short, long)]
-		delta: i32,
-	}
 }
 
 fn main() -> Fallible {
@@ -37,6 +34,5 @@ fn main() -> Fallible {
 		Commands::Start => App::default().start(),
     Commands::Quit => client_send(IpcMsg::Quit),
     Commands::OpenWindow { query } => client_send(IpcMsg::OpenWindow(query.clone())),
-    Commands::Delta { delta } => client_send(IpcMsg::Delta(*delta)),
 	}
 }

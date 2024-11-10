@@ -1,24 +1,29 @@
-use futures::{channel::mpsc::Sender, SinkExt};
-use iced::{window, Subscription, Task};
+use futures::{channel::mpsc, SinkExt};
+use iced::{stream, window, Subscription, Task};
 
-use crate::{ipc::IpcMsg, util::Fallible};
+use crate::{
+	components::{Search, SearchMsg}, ipc::{self, IpcMsg}, util::Fallible
+};
 
 #[derive(Default)]
 pub struct App {
-	x: i32,
-	tx: Option<Sender<()>>,
 	win: Option<window::Id>,
+	ipc_tx: Option<mpsc::Sender<()>>,
+
+	search: crate::components::Search,
 }
 
 #[derive(Clone, Debug)]
 pub enum Msg {
-	IpcReady(Sender<()>),
+	IpcReady(mpsc::Sender<()>),
 	Ipc(IpcMsg),
 	CloseWindow(window::Id),
+
+	Search(SearchMsg),
+
 	Dummy,
 }
 
-// elm
 impl App {
 	pub fn start(self) -> Fallible {
 		iced::daemon("pitstop", Self::update, Self::view)
@@ -30,22 +35,25 @@ impl App {
 	fn update(&mut self, msg: Msg) -> Task<Msg> {
 		match msg {
 			Msg::IpcReady(tx) => {
-				self.tx = Some(tx);
+				self.ipc_tx = Some(tx);
 			},
 			Msg::Ipc(imsg) => {
 				self.ipc_ping();
 				match imsg {
-					IpcMsg::Quit => return iced::exit(),
-					IpcMsg::OpenWindow(str) => {
-						// TODO: set search bar content
-						return self.open_window();
+					IpcMsg::Quit => {
+						ipc::server_cleanup_ipc();
+						return iced::exit();
 					},
-					IpcMsg::Delta(x) => {
-						self.x += x;
+					IpcMsg::OpenWindow(str) => {
+						self.search = Search::with_text(&str.unwrap_or_default());
+						return self.open_window();
 					},
 				}
 			},
 			Msg::CloseWindow(id) => self.on_window_close(id),
+
+			Msg::Search(smsg) => self.search.update(smsg),
+
 			Msg::Dummy => {},
 		}
 
@@ -53,13 +61,16 @@ impl App {
 	}
 
 	fn view(&self, _: window::Id) -> iced::Element<Msg> {
-		iced::widget::text(self.x.to_string()).into()
+		// TODO
+		self.search.view().map(Msg::Search)
 	}
 
 	fn subscription(&self) -> Subscription<Msg> {
 		Subscription::batch(vec![
 			self.ipc_subscription(),
 			window::close_events().map(Msg::CloseWindow),
+			#[cfg(not(windows))]
+			self.exit_subscription(),
 		])
 	}
 }
@@ -67,16 +78,14 @@ impl App {
 // ipc
 impl App {
 	fn ipc_subscription(&self) -> Subscription<Msg> {
-		Subscription::run(|| {
-			iced::stream::try_channel(100, crate::ipc::server_listen_ipc)
-		})
-		.map(Result::unwrap)
+		Subscription::run(|| iced::stream::try_channel(100, ipc::server_listen_ipc))
+			.map(Result::unwrap)
 	}
 
 	// must ping after receiving any ipc message,
 	// otherwise the ipc Subscription stops executing
 	fn ipc_ping(&mut self) {
-		if let Some(tx) = &mut self.tx {
+		if let Some(tx) = &mut self.ipc_tx {
 			futures::executor::block_on(tx.send(())).unwrap();
 		}
 	}
@@ -116,5 +125,13 @@ impl App {
 				dbg!(self.win);
 			}
 		}
+	}
+}
+
+#[cfg(not(windows))]
+impl App {
+	fn exit_subscription(&self) -> Subscription<Msg> {
+		Subscription::run(|| stream::try_channel(100, ipc::server_listen_exit_hook))
+			.map(Result::unwrap)
 	}
 }

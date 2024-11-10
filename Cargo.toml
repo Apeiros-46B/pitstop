@@ -13,3 +13,7 @@ iced = "0.13.1"
 interprocess = "2.2.1"
 ron = "0.8.1"
 serde = "1.0.214"
+
+[target.'cfg(not(windows))'.dependencies]
+ctrlc = { version = "3.4.5", features = ["termination"] }
+futures-time = "3.0.0"
