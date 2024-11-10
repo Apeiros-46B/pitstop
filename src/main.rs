@@ -5,8 +5,8 @@ use ipc::{client_send, IpcMsg};
 use util::Fallible;
 
 mod app;
+mod components;
 mod ipc;
-mod ui;
 mod util;
 
 #[derive(clap_derive::Parser)]
