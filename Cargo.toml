@@ -1,0 +1,13 @@
+[package]
+name = "pitstop"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.93"
+clap = "4.5.20"
+clap_derive = "4.5.18"
+iced = "0.13.1"
+interprocess = "2.2.1"
+ron = "0.8.1"
+serde = "1.0.214"
