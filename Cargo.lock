@@ -2450,6 +2450,7 @@ dependencies = [
  "anyhow",
  "clap",
  "clap_derive",
+ "futures",
  "iced",
  "interprocess",
  "ron",
