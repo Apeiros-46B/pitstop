@@ -1,8 +1,8 @@
 use futures::{channel::mpsc, SinkExt};
-use iced::{advanced, stream, window, Event, Subscription, Task};
+use iced::{mouse, stream, window, Event, Subscription, Task};
 
 use crate::{
-	components::{ListMode, ListMsg, Search, SearchMsg},
+	components::{self, ListMsg, SearchMsg},
 	ipc::{self, IpcMsg},
 	util::Fallible,
 };
@@ -25,13 +25,14 @@ pub enum Msg {
 
 	List(ListMsg),
 	Search(SearchMsg),
-	Focus,
 
+	FocusWidget,
+	FocusWindow,
 	Dummy,
 }
 
 impl App {
-	pub fn start(mut self) -> Fallible {
+	pub fn start(self) -> Fallible {
 		#[cfg(not(windows))]
 		{
 			// cleanup socket on panics
@@ -43,8 +44,6 @@ impl App {
 				hook(info);
 			}));
 		}
-
-		self.list.set_mode(ListMode::Omni);
 
 		iced::daemon("pitstop", Self::update, Self::view)
 			.subscription(Self::subscription)
@@ -66,8 +65,9 @@ impl App {
 				},
 				IpcMsg::C2SOpenWindow(query) => {
 					self.ping();
-					self.search = Search::with_text(&query.unwrap_or_default());
-					return self.open_window();
+					return self
+						.open_window()
+						.chain(Task::done(SearchMsg::Replace(query).into()));
 				},
 				_ => panic!("server received server->client signal"),
 			},
@@ -76,9 +76,13 @@ impl App {
 
 			Msg::List(lmsg) => return self.list.update(lmsg),
 			Msg::Search(smsg) => self.search.update(smsg),
-			// Msg::Focus => return self.search.focus(),
-			Msg::Focus => {},
 
+			Msg::FocusWidget => return self.focus_text_editor(),
+			Msg::FocusWindow => {
+				if let Some(id) = self.win {
+					return window::gain_focus(id);
+				}
+			},
 			Msg::Dummy => {},
 		}
 		Task::none()
@@ -93,10 +97,25 @@ impl App {
 		Subscription::batch(vec![
 			self.ipc_subscription(),
 			window::close_events().map(Msg::WindowClosedExternally),
-			iced::event::listen().map(Self::handle_events),
+			iced::event::listen().map(on_event),
 			#[cfg(not(windows))]
 			self.exit_subscription(),
 		])
+	}
+}
+
+// events
+fn on_event(evt: Event) -> Msg {
+	match evt {
+		Event::Window(window::Event::Unfocused) => Msg::FocusWindow,
+		Event::Mouse(mouse::Event::CursorMoved { .. }) => Msg::Dummy,
+		_ => Msg::FocusWidget,
+	}
+}
+
+impl App {
+	fn focus_text_editor(&mut self) -> Task<Msg> {
+		iced::advanced::widget::operate(components::focus_first())
 	}
 }
 
@@ -132,18 +151,14 @@ impl App {
 				decorations: false,
 				transparent: false,
 				level: window::Level::AlwaysOnTop,
-				platform_specific: window::settings::PlatformSpecific {
-					application_id: "pitstop".to_string(),
-					override_redirect: false,
-				},
-				// exit_on_close_request: false,
 				exit_on_close_request: true,
 				..Default::default()
 			});
 			self.win = Some(id);
-			task.map(|_| Msg::Dummy).chain(advanced::widget::operate(
-				advanced::widget::operation::focusable::focus_next(),
-			))
+			task
+				.map(|_| Msg::Dummy)
+				.chain(window::gain_focus(id))
+				.chain(self.focus_text_editor())
 		} else {
 			Task::none()
 		}
@@ -163,34 +178,6 @@ impl App {
 			if id == close_id {
 				self.win = None;
 			}
-		}
-	}
-}
-
-// key handling
-impl App {
-	// handles miscellaneous keypresses that are not captured by the Search input
-	// TODO: configurable binds
-	fn handle_events(evt: Event) -> Msg {
-		use iced::keyboard;
-
-		match evt {
-			Event::Keyboard(keyboard::Event::KeyPressed {
-				key: keyboard::Key::Character(s),
-				modifiers,
-				..
-			}) => match s.parse::<usize>() {
-				Ok(n) if n > 0 && n < 10 && (modifiers.control() ^ modifiers.alt()) => {
-					// Ctrl+N = select N
-					// Alt+N = confirm N
-					dbg!(Msg::List(ListMsg::Nth {
-						n: n - 1,
-						confirm: modifiers.alt(),
-					}))
-				},
-				_ => Msg::Focus,
-			},
-			_ => Msg::Focus,
 		}
 	}
 }

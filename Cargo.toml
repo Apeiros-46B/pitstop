@@ -9,10 +9,13 @@ clap = "4.5.20"
 clap_derive = "4.5.18"
 futures = "0.3.31"
 fuzzy-matcher = "0.3.7"
+homedir = "0.3.4"
 iced = { version = "0.13.1", features = ["advanced", "lazy"] }
 interprocess = "2.2.1"
+open = "5.3.0"
 ron = "0.8.1"
 serde = "1.0.214"
+smol_str = "0.3.2"
 
 [target.'cfg(not(windows))'.dependencies]
 ctrlc = { version = "3.4.5", features = ["termination"] }

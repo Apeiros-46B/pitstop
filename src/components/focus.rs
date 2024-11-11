@@ -1,45 +1,34 @@
-// use std::any::{Any, TypeId};
+use iced::advanced::widget::{
+	operation::{self, focusable, Focusable},
+	Id, Operation,
+};
 
-// use iced::{
-// 	advanced::{
-// 		text::highlighter::PlainText,
-// 		widget::{self, operation, Operation},
-// 	},
-// 	widget::TextEditor,
-// };
+pub fn focus_first<T>() -> impl Operation<T>
+where
+	T: Send + 'static,
+{
+	struct FocusType {
+		count: focusable::Count,
+	}
 
-// use crate::app::Msg;
+	impl<T> Operation<T> for FocusType {
+		fn focusable(&mut self, state: &mut dyn Focusable, _id: Option<&Id>) {
+			match self.count.focused {
+				None => state.focus(),
+				Some(0) => state.focus(),
+				Some(_) => state.unfocus(),
+			}
+		}
 
-// pub struct FocusEditor {
-// 	target: widget::Id,
-// }
+		fn container(
+			&mut self,
+			_id: Option<&Id>,
+			_bounds: iced::Rectangle,
+			operate_on_children: &mut dyn FnMut(&mut dyn Operation<T>),
+		) {
+			operate_on_children(self);
+		}
+	}
 
-// impl FocusEditor {
-// 	pub fn new(target: widget::Id) -> Self {
-// 		Self { target }
-// 	}
-// }
-
-// impl Operation for FocusEditor {
-// 	fn container(
-// 		&mut self,
-// 		_id: Option<&widget::Id>,
-// 		_bounds: iced::Rectangle,
-// 		operate_on_children: &mut dyn FnMut(&mut dyn Operation<()>),
-// 	) {
-// 		operate_on_children(self);
-// 	}
-
-// 	fn focusable(
-// 		&mut self,
-// 		x: &mut dyn operation::Focusable,
-// 		id: Option<&widget::Id>,
-// 	) {
-// 		if x.type_id() == TypeId::of::<TextEditor<PlainText, Msg>>() {}
-// 		if let Some(id) = id {
-// 			if *id == self.target {}
-// 		}
-// 	}
-// }
-
-// pub fn focus()
+	operation::then(focusable::count(), |count| FocusType { count })
+}
